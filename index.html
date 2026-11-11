@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>计算器</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    padding: 20px;
+  }
+  .calculator {
+    width: 340px; max-width: 94vw;
+    background: rgba(255,255,255,0.08);
+    backdrop-filter: blur(18px);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 28px;
+    padding: 22px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+  }
+  .display {
+    background: rgba(0,0,0,0.35);
+    border-radius: 18px;
+    padding: 18px 20px;
+    margin-bottom: 18px;
+    text-align: right;
+    min-height: 104px;
+    display: flex; flex-direction: column; justify-content: flex-end;
+    overflow: hidden;
+  }
+  .history {
+    color: rgba(255,255,255,0.45);
+    font-size: 15px; min-height: 20px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .current {
+    color: #fff;
+    font-size: 46px; font-weight: 600; line-height: 1.15;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .keys {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  button {
+    border: none; cursor: pointer;
+    height: 62px; border-radius: 16px;
+    font-size: 22px; font-weight: 500;
+    color: #fff;
+    background: rgba(255,255,255,0.12);
+    transition: transform .06s ease, background .15s ease, filter .15s ease;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:hover { background: rgba(255,255,255,0.22); }
+  button:active { transform: scale(0.94); }
+  button.fn { background: rgba(255,255,255,0.28); color: #111; font-weight: 600; }
+  button.fn:hover { background: rgba(255,255,255,0.38); }
+  button.op { background: #f39c3d; font-size: 26px; }
+  button.op:hover { background: #ffab52; }
+  button.op.active { background: #fff; color: #f39c3d; }
+  button.eq { background: #f39c3d; font-size: 26px; }
+  button.zero { grid-column: span 2; }
+  .tip { text-align: center; color: rgba(255,255,255,0.35); font-size: 12px; margin-top: 14px; }
+</style>
+</head>
+<body>
+<div class="calculator">
+  <div class="display">
+    <div class="history" id="history"></div>
+    <div class="current" id="current">0</div>
+  </div>
+  <div class="keys">
+    <button class="fn" data-action="clear">AC</button>
+    <button class="fn" data-action="negate">+/-</button>
+    <button class="fn" data-action="percent">%</button>
+    <button class="op" data-op="/">÷</button>
+
+    <button data-num="7">7</button>
+    <button data-num="8">8</button>
+    <button data-num="9">9</button>
+    <button class="op" data-op="*">×</button>
+
+    <button data-num="4">4</button>
+    <button data-num="5">5</button>
+    <button data-num="6">6</button>
+    <button class="op" data-op="-">−</button>
+
+    <button data-num="1">1</button>
+    <button data-num="2">2</button>
+    <button data-num="3">3</button>
+    <button class="op" data-op="+">+</button>
+
+    <button class="zero" data-num="0">0</button>
+    <button data-num=".">.</button>
+    <button class="eq" data-action="equals">=</button>
+  </div>
+  <div class="tip">支持键盘：数字、+ − × ÷、回车 =、Esc 清除、退格删一位</div>
+</div>
+
+<script>
+  const currentEl = document.getElementById('current');
+  const historyEl = document.getElementById('history');
+  const opButtons = document.querySelectorAll('button.op');
+
+  let current = '0';
+  let previous = null;
+  let operator = null;
+  let waitingForOperand = false;
+
+  const opSymbol = { '+': '+', '-': '−', '*': '×', '/': '÷' };
+
+  function format(numStr) {
+    if (numStr === 'Error') return numStr;
+    let neg = '';
+    let s = numStr;
+    if (s.startsWith('-')) { neg = '-'; s = s.slice(1); }
+    const parts = s.split('.');
+    let intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return neg + intPart + (parts.length > 1 ? '.' + parts[1] : '');
+  }
+
+  function render() {
+    currentEl.textContent = format(current);
+    historyEl.textContent = (previous !== null && operator)
+      ? format(String(previous)) + ' ' + opSymbol[operator]
+      : '';
+    opButtons.forEach(b => b.classList.toggle('active', waitingForOperand && b.dataset.op === operator));
+    // shrink font if too long
+    const len = current.replace(/[^0-9.]/g, '').length;
+    currentEl.style.fontSize = len > 12 ? '30px' : (len > 9 ? '38px' : '46px');
+  }
+
+  function inputDigit(d) {
+    if (current === 'Error') current = '0';
+    if (waitingForOperand) { current = d === '.' ? '0.' : d; waitingForOperand = false; }
+    else if (d === '.') { if (!current.includes('.')) current += '.'; }
+    else if (current === '0') { current = d; }
+    else if (current.replace(/[^0-9]/g, '').length < 15) { current += d; }
+    render();
+  }
+
+  function compute(a, b, op) {
+    switch (op) {
+      case '+': return a + b;
+      case '-': return a - b;
+      case '*': return a * b;
+      case '/': return b === 0 ? NaN : a / b;
+    }
+  }
+
+  function cleanResult(n) {
+    if (!isFinite(n) || isNaN(n)) return 'Error';
+    let r = Math.round(n * 1e12) / 1e12;
+    let s = String(r);
+    if (s.includes('e')) s = r.toFixed(12).replace(/\.?0+$/, '');
+    return s;
+  }
+
+  function setOperator(nextOp) {
+    const value = parseFloat(current);
+    if (operator && previous !== null && !waitingForOperand) {
+      const result = compute(previous, value, operator);
+      current = cleanResult(result);
+      previous = current === 'Error' ? null : parseFloat(current);
+    } else {
+      previous = value;
+    }
+    operator = nextOp;
+    waitingForOperand = true;
+    render();
+  }
+
+  function equals() {
+    if (operator === null || previous === null) return;
+    const result = compute(previous, parseFloat(current), operator);
+    historyEl.textContent = format(String(previous)) + ' ' + opSymbol[operator] + ' ' + format(current) + ' =';
+    current = cleanResult(result);
+    previous = null; operator = null; waitingForOperand = true;
+    currentEl.textContent = format(current);
+    opButtons.forEach(b => b.classList.remove('active'));
+    const len = current.replace(/[^0-9.]/g, '').length;
+    currentEl.style.fontSize = len > 12 ? '30px' : (len > 9 ? '38px' : '46px');
+  }
+
+  function clearAll() {
+    current = '0'; previous = null; operator = null; waitingForOperand = false;
+    render();
+  }
+
+  function backspace() {
+    if (waitingForOperand || current === 'Error') return;
+    current = current.length > 1 ? current.slice(0, -1) : '0';
+    if (current === '-') current = '0';
+    render();
+  }
+
+  document.querySelector('.keys').addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    if (btn.dataset.num !== undefined) inputDigit(btn.dataset.num);
+    else if (btn.dataset.op) setOperator(btn.dataset.op);
+    else if (btn.dataset.action === 'clear') clearAll();
+    else if (btn.dataset.action === 'equals') equals();
+    else if (btn.dataset.action === 'negate') {
+      if (current !== '0' && current !== 'Error') { current = current.startsWith('-') ? current.slice(1) : '-' + current; render(); }
+    }
+    else if (btn.dataset.action === 'percent') {
+      if (current !== 'Error') { current = cleanResult(parseFloat(current) / 100); render(); }
+    }
+  });
+
+  document.addEventListener('keydown', e => {
+    if (/^[0-9.]$/.test(e.key)) inputDigit(e.key);
+    else if (['+', '-', '*', '/'].includes(e.key)) { e.preventDefault(); setOperator(e.key); }
+    else if (e.key === 'Enter' || e.key === '=') { e.preventDefault(); equals(); }
+    else if (e.key === 'Escape') clearAll();
+    else if (e.key === 'Backspace') backspace();
+    else if (e.key === '%') { current = cleanResult(parseFloat(current) / 100); render(); }
+  });
+
+  render();
+</script>
+</body>
+</html>
